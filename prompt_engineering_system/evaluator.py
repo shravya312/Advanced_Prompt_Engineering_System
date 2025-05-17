@@ -35,4 +35,4 @@ class PromptEvaluator:
             "avg_bleu": df["bleu"].mean(),
             "avg_response_time": df["response_time"].mean(),
             "avg_cost": df["cost"].mean()
-        } 
+        }
