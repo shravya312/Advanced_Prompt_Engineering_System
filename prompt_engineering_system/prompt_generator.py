@@ -38,4 +38,4 @@ class PromptGenerator:
         if template_name not in self.templates:
             raise ValueError(f"Template '{template_name}' not found")
         template = self.templates[template_name]
-        return template.format(system_prompt=system_prompt, **kwargs) 
+        return template.format(system_prompt=system_prompt, **kwargs)
