@@ -1,4 +1,4 @@
-import streamlit as st #streamlit
+import streamlit as st
 from prompt_engineering_system.main import PromptEngineeringSystem
 
 st.set_page_config(page_title="Advanced Prompt Engineering System", layout="wide")
@@ -37,4 +37,4 @@ if st.button("Run Task"):
         st.subheader("Output")
         st.code(result["output"])
         st.subheader("Prompt Score (ROUGE-L)")
-        st.write(result["score"]) 
+        st.write(result["score"])
