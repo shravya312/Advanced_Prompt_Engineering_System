@@ -1,15 +1,23 @@
 from transformers import pipeline
 from .prompt_generator import PromptGenerator
 from .evaluator import PromptEvaluator
-import torch #torch
+import torch
+import os
+import streamlit as st
+
+os.environ["HF_HOME"] = "C:/Users/Shravya H Jain/huggingface_cache"
+
+@st.cache_resource
+def get_pipelines():
+    code_pipe = pipeline("text-generation", model="Salesforce/codegen-350M-mono", device=-1)
+    summ_pipe = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", device=-1)
+    return code_pipe, summ_pipe
 
 class SpecializedApplications:
     def __init__(self):
-        self.device = 0 if torch.cuda.is_available() else -1
+        self.device = -1  # Force CPU to avoid meta tensor errors
         self.code_model = "Salesforce/codegen-350M-mono"
-        self.code_pipe = pipeline("text-generation", model=self.code_model, device=self.device)
-        self.summ_model = "facebook/bart-large-cnn"
-        self.summ_pipe = pipeline("summarization", model=self.summ_model, device=self.device)
+        self.code_pipe, self.summ_pipe = get_pipelines()
         self.prompt_generator = PromptGenerator()
         self.evaluator = PromptEvaluator()
         self._setup_templates()
@@ -38,12 +46,11 @@ class SpecializedApplications:
         for system_prompt in self.prompt_generator.generate_system_prompts(task_type, language):
             prompt = self.prompt_generator.generate_prompt(template_name, system_prompt, **input_kwargs)
             if task_type == "code_generation":
-                output = pipe(prompt, max_length=128)[0]['generated_text']
+                output = pipe(prompt, max_length=256)[0]['generated_text']  # Increased max_length
             elif task_type == "summarization":
                 output = pipe(prompt, max_length=60, min_length=20, do_sample=False)[0]['summary_text']
             else:
                 output = pipe(prompt, max_length=60, min_length=20, do_sample=False)[0]['summary_text']
-            # Use input text or task description as default reference for evaluation
             reference = input_kwargs.get("text", input_kwargs.get("task_description", ""))
             score = self.evaluator.rouge.score(reference, output)['rougeL'].fmeasure
             if score > best_score:
@@ -70,4 +77,4 @@ class SpecializedApplications:
 
     def answer_question(self, context: str, question: str):
         input_kwargs = {"context": context, "question": question}
-        return self.optimize_prompt("question_answering", "question_answering", input_kwargs, self.summ_pipe) 
+        return self.optimize_prompt("question_answering", "question_answering", input_kwargs, self.summ_pipe)
