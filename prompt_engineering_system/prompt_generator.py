@@ -25,29 +25,56 @@ class PromptGenerator:
                 f"Write efficient {language} code focusing on optimal algorithmic complexity and resource management.",
                 f"Generate robust {language} code with clear input validation, exception handling, and documentation."
             ]
+
         elif task_type == "summarization":
             return [
-                "You are a world-class summarizer. Create concise, accurate summaries in your own words without copying any sentences from the original text.",
-                "You are an expert summarizer. Write a clear, concise summary that captures the key points using original phrasing.",
+                "You are a world-class summarizer. Create concise, accurate summaries,dont copy and paste.",
+                "Summarize the following text clearly and briefly,dont copy and paste.",
+                "You are a helpful assistant. Write a short, informative summary,dont copy and paste",
+                "you summarize the text consise dont copy and paste",
+                "You are an expert summarizer. Write a clear, concise summary in your own words without copying any sentences from the original text.",
                 "Summarize the following content accurately and briefly, ensuring the summary is paraphrased and not directly lifted from the original.",
-                "Act as a skilled assistant. Provide a short, insightful summary that highlights the main ideas clearly and succinctly without repetition."
-    ]
+                "Act as a skilled assistant. Provide a short, insightful summary that captures the key points using original phrasing.",
+                "Read the following text and generate a coherent, to-the-point summary that avoids repetition or direct quotes.",
+                "Write a well-structured summary highlighting the main ideas in a concise and original manner—do not copy any part of the input text.",
+                "Rephrase the core information from the following passage into a brief summary. Use your own words and ensure clarity."
+            ]
         elif task_type == "data_extraction":
             return [
                 "You are a highly accurate data extraction specialist. Extract only the explicitly requested fields without any additional or irrelevant information.",
                 "Carefully extract and return the specified data fields in a clean, structured, and consistent format, preferably JSON.",
+                "Act as a precise information retrieval system: provide only the requested data points and omit any unrelated text or commentary.",
                 "Your task is to extract the required information exactly as requested, formatted in a structured and machine-readable manner. Avoid explanations or extra content.",
-                "Be concise and accurate. Return the requested data in a standardized format, excluding all extraneous details."
+                "Focus solely on the fields specified. Deliver the extracted data concisely, maintaining consistent formatting and clarity.",
+                "Extract only the essential data fields with precision, ensuring the output is clear, structured, and ready for downstream processing.",
+                "Provide the requested information strictly as instructed, formatted consistently without adding any interpretation or summary.",
+                "Be concise and accurate. Return the requested data in a standardized format, excluding all extraneous details.",
+                "You are a focused data extraction engine. Output only the requested fields in a structured format suitable for automation.",
+                "Extract requested data points cleanly and precisely, avoiding any additional explanation, comments, or formatting beyond the specified structure."
             ]
 
         elif task_type == "question_answering":
             return [
                 "You are a knowledgeable and helpful assistant. Provide concise, accurate, and clear answers based strictly on the given context.",
                 "Answer the question directly and precisely, ensuring correctness and relevance to the provided information.",
+                "You are an expert in question answering. Respond clearly and comprehensively without unnecessary details.",
+                "Provide well-informed, concise answers that address the question fully and rely solely on the context provided.",
+                "Be clear, accurate, and helpful. Avoid speculation and stick to information available in the context.",
+                "Answer questions with clarity and precision, using only the facts given. Do not include unrelated information.",
+                "You are a context-aware assistant. Provide direct, succinct answers backed by the information supplied.",
+                "Focus on answering the question completely and correctly, prioritizing clarity and relevance.",
+                "Give straightforward, informative answers while avoiding ambiguity or vague responses.",
+                "Respond as a professional expert: concise, accurate, and directly addressing the question.",
                 "Provide answers that are fact-based, neutral, and easy to understand, grounded entirely on the provided context.",
-                "Answer with confidence and accuracy, based strictly on the data given, avoiding assumptions or guesses."
+                "Act as a reliable source of information. Deliver answers that are brief but thorough, with no extraneous content.",
+                "Address the question precisely, focusing on clarity and correctness without unnecessary elaboration.",
+                "Provide answers that demonstrate understanding of the question, maintaining focus on relevant details only.",
+                "Deliver responses that are structured and to the point, ensuring the user gains clear insight from your answer.",
+                "Be succinct and informative, ensuring each answer directly satisfies the question with no fluff.",
+                "Answer with confidence and accuracy, based strictly on the data given, avoiding assumptions or guesses.",
+                "Maintain an objective tone, presenting answers clearly, logically, and free from ambiguity.",
+                "Provide responses that a subject matter expert would give—concise, precise, and well-informed."
             ]
-
 
         return ["You are a helpful assistant."]
 
