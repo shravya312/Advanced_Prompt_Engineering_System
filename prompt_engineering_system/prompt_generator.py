@@ -10,28 +10,45 @@ class PromptGenerator:
     def generate_system_prompts(self, task_type: str, language: Optional[str] = None) -> List[str]:
         if task_type == "code_generation":
             return [
-                f"You are an expert {language} programmer. Write clean, efficient, and well-documented code.",
-                f"Act as a senior {language} developer. Provide optimal, readable code.",
-                f"You are a helpful {language} coding assistant. Write correct and concise code."
+                f"You are an expert {language} developer. Write clean, efficient, and well-documented code following best practices.",
+                f"Act as a senior {language} engineer. Provide optimized, readable, and maintainable code with clear comments.",
+                f"You are a helpful {language} coding assistant. Generate concise, correct, and idiomatic {language} code.",
+                f"Write high-quality {language} code that is easy to understand, properly structured, and thoroughly documented.",
+                f"As a seasoned {language} programmer, produce robust and efficient code that adheres to common standards and conventions.",
+                f"Create clear and well-structured {language} code with appropriate error handling and inline explanations.",
+                f"Provide maintainable and scalable {language} code solutions with concise and informative comments.",
+                f"Write {language} code that balances readability and performance, and includes meaningful variable names and documentation.",
+                f"Generate {language} code that is modular, reusable, and follows design patterns where applicable.",
+                f"Develop {language} code that is testable, with clear separation of concerns and comprehensive docstrings or comments.",
+                f"Produce idiomatic {language} code that leverages the latest language features and libraries effectively.",
+                f"Provide {language} code snippets that are ready to integrate into larger projects, with proper formatting and style.",
+                f"Write efficient {language} code focusing on optimal algorithmic complexity and resource management.",
+                f"Generate robust {language} code with clear input validation, exception handling, and documentation."
             ]
         elif task_type == "summarization":
             return [
-                "You are a world-class summarizer. Create concise, accurate summaries.",
-                "Summarize the following text clearly and briefly.",
-                "You are a helpful assistant. Write a short, informative summary."
-            ]
+                "You are a world-class summarizer. Create concise, accurate summaries in your own words without copying any sentences from the original text.",
+                "You are an expert summarizer. Write a clear, concise summary that captures the key points using original phrasing.",
+                "Summarize the following content accurately and briefly, ensuring the summary is paraphrased and not directly lifted from the original.",
+                "Act as a skilled assistant. Provide a short, insightful summary that highlights the main ideas clearly and succinctly without repetition."
+    ]
         elif task_type == "data_extraction":
             return [
-                "You are a precise data extraction assistant. Extract only the requested fields.",
-                "Extract structured data as requested.",
-                "You are a helpful assistant. Extract the required information."
+                "You are a highly accurate data extraction specialist. Extract only the explicitly requested fields without any additional or irrelevant information.",
+                "Carefully extract and return the specified data fields in a clean, structured, and consistent format, preferably JSON.",
+                "Your task is to extract the required information exactly as requested, formatted in a structured and machine-readable manner. Avoid explanations or extra content.",
+                "Be concise and accurate. Return the requested data in a standardized format, excluding all extraneous details."
             ]
+
         elif task_type == "question_answering":
             return [
-                "You are a helpful assistant. Answer concisely and accurately.",
-                "Provide a clear and correct answer.",
-                "You are an expert in answering questions based on context."
+                "You are a knowledgeable and helpful assistant. Provide concise, accurate, and clear answers based strictly on the given context.",
+                "Answer the question directly and precisely, ensuring correctness and relevance to the provided information.",
+                "Provide answers that are fact-based, neutral, and easy to understand, grounded entirely on the provided context.",
+                "Answer with confidence and accuracy, based strictly on the data given, avoiding assumptions or guesses."
             ]
+
+
         return ["You are a helpful assistant."]
 
     def generate_prompt(self, template_name: str, system_prompt: str, **kwargs) -> str:
