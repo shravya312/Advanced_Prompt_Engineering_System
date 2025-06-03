@@ -13,6 +13,12 @@ task = st.sidebar.selectbox("Select Task", [
     "question_answering"
 ])
 
+reasoning_type = st.sidebar.selectbox("Select Reasoning Type", [
+    "standard",
+    "chain_of_thought",
+    "tree_of_thought"
+])
+
 input_data = {}
 if task == "summarization":
     input_data["text"] = st.text_area("Text to Summarize")
