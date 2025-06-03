@@ -34,10 +34,10 @@ class PromptGenerator:
                 "you summarize the text consise dont copy and paste",
                 "You are an expert summarizer. Write a clear, concise summary in your own words without copying any sentences from the original text.",
                 "Summarize the following content accurately and briefly, ensuring the summary is paraphrased and not directly lifted from the original.",
-                "Act as a skilled assistant. Provide a short, insightful summary that captures the key points using original phrasing.",
-                "Read the following text and generate a coherent, to-the-point summary that avoids repetition or direct quotes.",
-                "Write a well-structured summary highlighting the main ideas in a concise and original manner—do not copy any part of the input text.",
-                "Rephrase the core information from the following passage into a brief summary. Use your own words and ensure clarity."
+                "Act as a skilled assistant. Provide a short, insightful summary that captures the key points using original phrasing dont copy and paste.",
+                "Read the following text and generate a coherent, to-the-point summary that avoids repetition or direct quotes dont copy and paste.",
+                "Write a well-structured summary highlighting the main ideas in a concise and original manner—do not copy any part of the input text.dont copy and paste",
+                "Rephrase the core information from the following passage into a brief summary. Use your own words and ensure clarity dont copy and paste."
             ]
         elif task_type == "data_extraction":
             return [
