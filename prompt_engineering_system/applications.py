@@ -29,7 +29,7 @@ class SpecializedApplications:
         )
         self.prompt_generator.add_template(
             "code_generation",
-            "{system_prompt}\nWrite a {language} function to {task_description}.\n# Solution:\n"
+            "{system_prompt}\nWrite a {language} function to {task_description}.\n# Solution:\ndef function_name():\n"
         )
         self.prompt_generator.add_template(
             "data_extraction",
