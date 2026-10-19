@@ -110,7 +110,10 @@ if task == "summarization":
     input_data["text"] = st.text_area("Text to Summarize")
 elif task == "code_generation":
     st.header("Code Generation")
-    input_data["task_description"] = st.text_input("Describe the code task")
+    input_data["task_description"] = st.text_input(
+        "Describe the code task",
+        placeholder="e.g. YOLOv8 on an image path, class 9 only, draw boxes (one function)",
+    )
     input_data["language"] = st.selectbox("Programming Language", ["Python", "JavaScript", "Java", "C++", "Other"])
 elif task == "data_extraction":
     st.header("Data Extraction")

@@ -15,6 +15,7 @@ from prompt_engineering_system.reasoning_output import (
     parse_tree_of_thought_output,
 )
 import numpy as np
+import re
 import uuid
 
 TREE_OF_THOUGHT_SUMMARY_SYSTEM = (
@@ -84,6 +85,30 @@ def qdrant_config() -> Tuple[str, str]:
     return url, api_key
 
 
+def _normalize_code_task_description(task_description: str, language: str) -> str:
+    """Avoid 'Write a X function to Write a X function...' when users paste full sentences."""
+    text = task_description.strip()
+    if not text:
+        return text
+    lang = re.escape(language.strip())
+    prefix = (
+        r"^write\s+(?:a\s+)?"
+        rf"(?:{lang}\s+)?"
+        r"(?:function|class|script|program)\s+"
+        r"(?:to|for|that|which|using)\s+"
+    )
+    stripped = re.sub(prefix, "", text, flags=re.IGNORECASE).strip()
+    stripped = re.sub(r"^the\s+", "", stripped, flags=re.IGNORECASE).strip()
+    if stripped and not re.match(
+        r"^(use|implement|create|build|write|load|run|compute|define|develop|"
+        r"accept|read|parse|convert|extract|generate|return|given)\b",
+        stripped,
+        flags=re.IGNORECASE,
+    ):
+        stripped = f"Use {stripped}"
+    return stripped or text
+
+
 class SpecializedApplications:
     def __init__(self):
         api_key = os.getenv("GEMINI_API_KEY") or ""
@@ -150,7 +175,19 @@ class SpecializedApplications:
         )
         self.prompt_generator.add_template(
             "code_generation",
-            "{system_prompt}\nWrite a {language} function to {task_description}.\n# Solution:\ndef function_name():\n",
+            (
+                "{system_prompt}\n\n"
+                "Programming language: {language}\n"
+                "Task: {task_description}\n\n"
+                "{reasoning_instructions}\n"
+                "Output requirements (apply to the final code):\n"
+                "- Follow the task literally; use file paths, arrays, or parameters the task implies.\n"
+                "- Do not use webcam, live video capture, or interactive hardware unless the task explicitly asks for it.\n"
+                "- Default: one clear top-level function that solves the task. Add small local helpers only if needed.\n"
+                "- Use a class only if the task clearly requires persistent state or multiple coordinated methods.\n"
+                "- Do not add `if __name__ == \"__main__\"`, argparse, or a demo loop unless the task asks for a script entry point.\n"
+                "Put any explanation before the code. End with the complete solution in exactly one fenced code block.\n"
+            ),
         )
         self.prompt_generator.add_template(
             "data_extraction",
@@ -398,7 +435,27 @@ class SpecializedApplications:
         )
 
     def generate_code(self, task_description: str, language: str, reasoning_type: str):
-        input_kwargs = {"task_description": task_description, "language": language}
+        task_description = _normalize_code_task_description(task_description, language)
+        reasoning_instructions = ""
+        if reasoning_type == "chain_of_thought":
+            reasoning_instructions = (
+                "Reasoning: use at most 4 short bullet steps, then the final code "
+                "(must satisfy the output requirements above)."
+            )
+        elif reasoning_type == "tree_of_thought":
+            reasoning_instructions = (
+                "Reasoning: compare two approaches in a short paragraph, pick one, then the final code "
+                "(must satisfy the output requirements above)."
+            )
+        elif reasoning_type == "standard":
+            reasoning_instructions = (
+                "No long explanation; brief comments in code are enough."
+            )
+        input_kwargs = {
+            "task_description": task_description,
+            "language": language,
+            "reasoning_instructions": reasoning_instructions,
+        }
         return self.optimize_prompt(
             "code_generation",
             "code_generation",

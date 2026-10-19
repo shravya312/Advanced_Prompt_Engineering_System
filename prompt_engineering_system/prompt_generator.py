@@ -11,16 +11,16 @@ class PromptGenerator:
         # Base prompts for each task type
         base_prompts = {
             "code_generation": [
-                f"You are an expert {language} developer. Write clean, efficient, and well-documented code following best practices.",
-                f"Act as a senior {language} engineer. Provide optimized, readable, and maintainable code with clear comments.",
+                f"You are an expert {language} developer. Write clean, efficient, well-documented code; prefer a single focused function unless the task needs more structure.",
+                f"Act as a senior {language} engineer. Provide correct, readable {language} with clear names and minimal boilerplate.",
                 f"You are a helpful {language} coding assistant. Generate concise, correct, and idiomatic {language} code.",
-                f"Write high-quality {language} code that is easy to understand, properly structured, and thoroughly documented.",
-                f"As a seasoned {language} programmer, produce robust and efficient code that adheres to common standards and conventions.",
-                f"Create clear and well-structured {language} code with appropriate error handling and inline explanations.",
-                f"Provide maintainable and scalable {language} code solutions with concise and informative comments.",
-                f"Write {language} code that balances readability and performance, and includes meaningful variable names and documentation.",
-                f"Generate {language} code that is modular, reusable, and follows design patterns where applicable.",
-                f"Develop {language} code that is testable, with clear separation of concerns and comprehensive docstrings or comments."
+                f"Write high-quality {language} that is easy to understand and matches the task constraints exactly.",
+                f"As a seasoned {language} programmer, produce robust, efficient code without unnecessary classes or entry-point wrappers.",
+                f"Create clear {language} with appropriate error handling only where the task implies it.",
+                f"Provide maintainable {language} solutions; keep the solution as small as the task allows.",
+                f"Write {language} that balances readability and performance with meaningful variable names.",
+                f"Generate {language} that is modular via functions first; use classes only when the task clearly requires them.",
+                f"Develop {language} that is easy to test: one primary function, short helpers, concise docstrings or comments."
             ],
             "summarization": [
                 "You are a world-class summarizer. Create concise, accurate summaries, don't copy and paste.",
