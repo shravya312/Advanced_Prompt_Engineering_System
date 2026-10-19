@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 from prompt_engineering_system.main import PromptEngineeringSystem
+from prompt_engineering_system.applications import get_qdrant_client, qdrant_config
 import tempfile
 import shutil
 import re
@@ -20,7 +21,11 @@ import re
 st.set_page_config(layout="wide")
 st.title("Advanced Prompt Engineering System")
 
-system = PromptEngineeringSystem()
+@st.cache_resource
+def get_system():
+    return PromptEngineeringSystem()
+
+system = get_system()
 
 # Initialize session state for PDF processing for RAG
 if 'processed_pdf' not in st.session_state:
@@ -35,6 +40,12 @@ if 'chunks' not in st.session_state:
     st.session_state.chunks = []
 if 'last_uploaded_filename' not in st.session_state:
     st.session_state.last_uploaded_filename = None
+
+_qdrant_url, _qdrant_key = qdrant_config()
+if get_qdrant_client(_qdrant_url, _qdrant_key):
+    st.sidebar.success("Qdrant: connected (required for PDF/RAG)")
+else:
+    st.sidebar.error("Qdrant: not connected — fix QDRANT_URL / QDRANT_API_KEY in .env")
 
 task = st.sidebar.selectbox("Select Task", [
     "summarization",
@@ -75,11 +86,15 @@ if pdf_file is not None:
                 chunks = system.applications.chunk_text(text)
                 st.session_state.chunks = chunks
                 embeddings = system.applications.get_embeddings(chunks)
-                if system.applications._setup_rag_collection() and system.applications.upload_to_qdrant(chunks, embeddings):
+                if (
+                    system.applications._setup_rag_collection()
+                    and embeddings is not None
+                    and system.applications.upload_to_qdrant(chunks, embeddings)
+                ):
                     st.session_state.processed_pdf = True
-                    st.sidebar.success("✅ PDF processed and indexed.")
+                    st.sidebar.success("PDF indexed in Qdrant.")
                 else:
-                    st.sidebar.error("Failed to process and index PDF.")
+                    st.sidebar.error("Failed to index PDF in Qdrant.")
             else:
                 st.sidebar.error("Failed to extract text from PDF.")
         except Exception as e:
@@ -127,12 +142,36 @@ if st.button("Run Task"):
             st.code(result.get("system_prompt", "N/A"))
             st.subheader("Full Prompt")
             st.code(result.get("prompt", "N/A"))
-            st.subheader("Output")
-            st.markdown(result.get("output", "N/A"))
+            tree = result.get("reasoning_tree")
+            chain = result.get("reasoning_chain")
+            if tree:
+                st.subheader("Tree of Thought (reasoning)")
+                st.markdown("#### Branch A")
+                st.markdown(tree.get("branch_a") or "_Section not found — see full output below._")
+                st.markdown("#### Branch B")
+                st.markdown(tree.get("branch_b") or "_Section not found — see full output below._")
+                st.markdown("#### Strategy comparison")
+                st.markdown(tree.get("comparison") or "_Section not found — see full output below._")
+                st.markdown("#### Final summary")
+                st.markdown(tree.get("final_summary") or "_Section not found — see full output below._")
+                with st.expander("Full model output (raw)"):
+                    st.markdown(result.get("output", "N/A"))
+            elif chain:
+                st.subheader("Chain of Thought (reasoning steps)")
+                for key, label in [
+                    ("step_1", "Step 1 — Main topic"),
+                    ("step_2", "Step 2 — Key points"),
+                    ("step_3", "Step 3 — What to omit"),
+                    ("step_4", "Step 4 — Draft summary"),
+                ]:
+                    st.markdown(f"#### {label}")
+                    st.markdown(chain.get(key) or "_Section not found — see full output below._")
+                st.markdown("#### Final summary")
+                st.markdown(chain.get("final_summary") or "_Section not found — see full output below._")
+                with st.expander("Full model output (raw)"):
+                    st.markdown(result.get("output", "N/A"))
+            else:
+                st.subheader("Output")
+                st.markdown(result.get("output", "N/A"))
             st.subheader("Prompt Score (ROUGE-L)")
             st.write(result.get("score", "N/A"))
-
-# Cleanup when the app is closed
-if st.session_state.pdf_path and os.path.exists(st.session_state.pdf_path):
-    shutil.rmtree(os.path.dirname(st.session_state.pdf_path))
-    st.session_state.pdf_path = None

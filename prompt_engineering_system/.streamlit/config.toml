@@ -1,0 +1,6 @@
+# Avoid Streamlit introspecting torch (sentence-transformers) during file watch — causes noisy tracebacks on Windows.
+[server]
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false

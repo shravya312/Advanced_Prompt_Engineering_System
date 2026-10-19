@@ -11,4 +11,5 @@ accelerate>=0.20.0
 qdrant-client>=1.6.0
 sentence-transformers>=2.2.2
 python-dotenv>=1.0.0
-pypdf>=3.17.1 
+pypdf>=3.17.1
+certifi>=2023.7.22

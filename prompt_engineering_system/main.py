@@ -1,7 +1,7 @@
 #main.py
-from .prompt_generator import PromptGenerator
-from .evaluator import PromptEvaluator
-from .applications import SpecializedApplications
+from prompt_engineering_system.prompt_generator import PromptGenerator
+from prompt_engineering_system.evaluator import PromptEvaluator
+from prompt_engineering_system.applications import SpecializedApplications
 
 class PromptEngineeringSystem:
     def __init__(self):
