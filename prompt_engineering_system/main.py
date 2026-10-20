@@ -16,8 +16,18 @@ class PromptEngineeringSystem:
         elif task_type == "code_generation":
             return self.applications.generate_code(kwargs["task_description"], kwargs["language"], reasoning_type=reasoning_type)
         elif task_type == "data_extraction":
-            return self.applications.extract_data(kwargs["text"], kwargs["fields"], reasoning_type=reasoning_type)
+            return self.applications.extract_data(
+                kwargs["text"],
+                kwargs["fields"],
+                reasoning_type=reasoning_type,
+                document_id=kwargs.get("document_id"),
+            )
         elif task_type == "question_answering":
-            return self.applications.answer_question(kwargs["context"], kwargs["question"], reasoning_type=reasoning_type)
+            return self.applications.answer_question(
+                kwargs["context"],
+                kwargs["question"],
+                reasoning_type=reasoning_type,
+                document_id=kwargs.get("document_id"),
+            )
         else:
             raise ValueError(f"Unknown task_type: {task_type}")

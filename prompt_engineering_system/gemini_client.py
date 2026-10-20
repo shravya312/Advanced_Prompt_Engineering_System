@@ -31,7 +31,7 @@ class GeminiModel:
         if not api_key:
             raise ValueError("GEMINI_API_KEY is required")
         self._api_key = api_key
-        self._primary_model = model or os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+        self._primary_model = model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
         self._model_chain = self._build_model_chain(self._primary_model)
         self._last_model_used: Optional[str] = None
 
@@ -61,14 +61,30 @@ class GeminiModel:
             return int(match.group(1))
         return None
 
-    def _call_model(self, model: str, prompt: str, timeout: int) -> GeminiResponse:
+    def _call_model(
+        self,
+        model: str,
+        prompt: str,
+        timeout: int,
+        max_output_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> GeminiResponse:
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{model}:generateContent?key={self._api_key}"
         )
-        payload = json.dumps(
-            {"contents": [{"parts": [{"text": prompt}]}]}
-        ).encode("utf-8")
+        body: dict = {"contents": [{"parts": [{"text": prompt}]}]}
+        if max_output_tokens is None:
+            env_cap = os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "3072").strip()
+            max_output_tokens = int(env_cap) if env_cap.isdigit() else None
+        gen_config: dict = {}
+        if max_output_tokens:
+            gen_config["maxOutputTokens"] = max_output_tokens
+        if temperature is not None:
+            gen_config["temperature"] = temperature
+        if gen_config:
+            body["generationConfig"] = gen_config
+        payload = json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             url,
             data=payload,
@@ -100,16 +116,32 @@ class GeminiModel:
         code = GeminiModel._http_code_from_error(exc)
         return code in _RETRYABLE_HTTP_CODES
 
-    def generate_content(self, prompt: str, timeout: Optional[int] = None) -> GeminiResponse:
+    def generate_content(
+        self,
+        prompt: str,
+        timeout: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        model_chain: Optional[List[str]] = None,
+        max_retries: Optional[int] = None,
+    ) -> GeminiResponse:
         if timeout is None:
-            timeout = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "180"))
+            timeout = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "120"))
         last_error: Optional[Exception] = None
-        max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
+        if max_retries is None:
+            max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
+        chain = model_chain if model_chain else self._model_chain
 
-        for model in self._model_chain:
+        for model in chain:
             for attempt in range(max_retries + 1):
                 try:
-                    return self._call_model(model, prompt, timeout)
+                    return self._call_model(
+                        model,
+                        prompt,
+                        timeout,
+                        max_output_tokens=max_output_tokens,
+                        temperature=temperature,
+                    )
                 except RuntimeError as exc:
                     last_error = exc
                     if self._is_retryable_error(exc) and attempt < max_retries:

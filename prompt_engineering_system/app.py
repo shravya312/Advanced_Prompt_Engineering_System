@@ -1,7 +1,11 @@
 import os
 import streamlit as st
 from prompt_engineering_system.main import PromptEngineeringSystem
-from prompt_engineering_system.applications import get_qdrant_client, qdrant_config
+from prompt_engineering_system.applications import (
+    get_qdrant_client,
+    pdf_document_id,
+    qdrant_config,
+)
 import tempfile
 import shutil
 import re
@@ -21,6 +25,49 @@ import re
 _SECTION_LABEL_RE = re.compile(
     r"(?<!\n)\s+(?=([A-Z][A-Za-z0-9][A-Za-z0-9 /&()\-]{0,48}):)",
 )
+
+
+def _short_document_id(doc_id):
+    if not doc_id:
+        return ""
+    return doc_id if len(doc_id) <= 24 else doc_id[:21] + "…"
+
+
+def show_sidebar_document_index_status(
+    applications,
+    session,
+    *,
+    already_in_qdrant: bool = False,
+) -> None:
+    """Sidebar message: uploaded doc + Qdrant vector check."""
+    if not session.processed_pdf or not session.text:
+        return
+    doc_id = getattr(session, "document_id", None)
+    status = applications.qdrant_document_status(session.text, document_id=doc_id)
+    count = status.get("vector_count", 0)
+    name = session.last_uploaded_filename or "document"
+    short_id = _short_document_id(doc_id)
+    id_hint = f" ID: `{short_id}` —" if short_id else ""
+    if status.get("ready"):
+        if already_in_qdrant or status.get("matches_document_id"):
+            st.sidebar.success(
+                f"**Already uploaded** — **{name}** is in Qdrant.{id_hint} "
+                f"{count} vectors (ready for Q&A / extraction). No re-indexing needed."
+            )
+        else:
+            st.sidebar.success(
+                f"Document uploaded: **{name}** —{id_hint} {count} vectors in Qdrant "
+                "(ready for Q&A / extraction)."
+            )
+    elif status.get("indexed"):
+        st.sidebar.warning(
+            f"Qdrant has {count} vectors but they do not match this document ID. "
+            "Re-upload the PDF or run the task again to re-index."
+        )
+    else:
+        st.sidebar.warning(
+            "Session marked uploaded but Qdrant has no vectors. Re-upload the PDF to index."
+        )
 
 
 def format_output_for_display(text: str) -> str:
@@ -62,6 +109,10 @@ if 'chunks' not in st.session_state:
     st.session_state.chunks = []
 if 'last_uploaded_filename' not in st.session_state:
     st.session_state.last_uploaded_filename = None
+if 'document_id' not in st.session_state:
+    st.session_state.document_id = None
+if 'pdf_already_in_qdrant' not in st.session_state:
+    st.session_state.pdf_already_in_qdrant = False
 
 _qdrant_url, _qdrant_key = qdrant_config()
 if get_qdrant_client(_qdrant_url, _qdrant_key):
@@ -86,35 +137,80 @@ reasoning_type = st.sidebar.selectbox("Select Reasoning Type", [
 pdf_file = st.sidebar.file_uploader("Upload a document (PDF) for extraction / Q&A", type=["pdf"])
 
 if pdf_file is not None:
-    if st.session_state.last_uploaded_filename != pdf_file.name:
-        st.session_state.processed_pdf = False # Reset processing status for new file
+    pdf_bytes = pdf_file.getvalue()
+    current_doc_id = pdf_document_id(pdf_bytes)
+    if st.session_state.document_id != current_doc_id:
+        st.session_state.processed_pdf = False
         st.session_state.pdf_path = None
         st.session_state.context_chunks = []
         st.session_state.text = None
         st.session_state.chunks = []
-        st.session_state.last_uploaded_filename = pdf_file.name
+        st.session_state.pdf_already_in_qdrant = False
+    st.session_state.document_id = current_doc_id
+    st.session_state.last_uploaded_filename = pdf_file.name
 
-    if not st.session_state.processed_pdf:
+    q_status = system.applications.qdrant_document_status(document_id=current_doc_id)
+    already_in_qdrant = bool(
+        q_status.get("matches_document_id") and q_status.get("indexed")
+    )
+    st.session_state.pdf_already_in_qdrant = already_in_qdrant
+    vector_count = int(q_status.get("vector_count") or 0)
+    short_id = _short_document_id(current_doc_id)
+
+    same_doc_ready = (
+        st.session_state.processed_pdf
+        and st.session_state.text
+        and st.session_state.document_id == current_doc_id
+    )
+
+    if same_doc_ready:
+        show_sidebar_document_index_status(
+            system.applications,
+            st.session_state,
+            already_in_qdrant=already_in_qdrant,
+        )
+    elif already_in_qdrant and st.session_state.text and st.session_state.document_id == current_doc_id:
+        st.session_state.processed_pdf = True
+        st.session_state.chunks = system.applications.chunk_text(st.session_state.text)
+        show_sidebar_document_index_status(
+            system.applications,
+            st.session_state,
+            already_in_qdrant=True,
+        )
+    elif not st.session_state.processed_pdf:
         temp_dir = tempfile.mkdtemp()
         temp_path = os.path.join(temp_dir, "uploaded.pdf")
         try:
             with open(temp_path, "wb") as f:
-                f.write(pdf_file.read())
+                f.write(pdf_bytes)
             st.session_state.pdf_path = temp_path
-            st.sidebar.info("⏳ Extracting and indexing document...")
+            if already_in_qdrant:
+                st.sidebar.success(
+                    f"**This PDF was already uploaded before.** Found in Qdrant "
+                    f"(ID `{short_id}`, {vector_count} vectors). "
+                    "Reading text for Q&A — **not** re-embedding."
+                )
+            else:
+                st.sidebar.info("⏳ New document — extracting and indexing in Qdrant…")
             text = system.applications.extract_text_from_pdf(temp_path)
             st.session_state.text = text
             if text:
-                chunks = system.applications.chunk_text(text)
-                st.session_state.chunks = chunks
-                embeddings = system.applications.get_embeddings(chunks)
-                if (
-                    system.applications._setup_rag_collection()
-                    and embeddings is not None
-                    and system.applications.upload_to_qdrant(chunks, embeddings)
+                st.session_state.chunks = system.applications.chunk_text(text)
+                if system.applications.index_document(
+                    text, document_id=current_doc_id
                 ):
                     st.session_state.processed_pdf = True
-                    st.sidebar.success("Document indexed in Qdrant.")
+                    idx = system.applications._last_document_index
+                    if idx.get("reused") or already_in_qdrant:
+                        st.sidebar.success(
+                            f"**Already uploaded** — reusing {idx.get('vector_count', vector_count)} "
+                            f"vectors in Qdrant (ID `{short_id}`)."
+                        )
+                    else:
+                        st.sidebar.success(
+                            idx.get("message")
+                            or f"Document indexed in Qdrant ({idx.get('vector_count', 0)} vectors)."
+                        )
                 else:
                     st.sidebar.error("Failed to index document in Qdrant.")
             else:
@@ -124,6 +220,14 @@ if pdf_file is not None:
             if st.session_state.pdf_path:
                 shutil.rmtree(os.path.dirname(st.session_state.pdf_path))
                 st.session_state.pdf_path = None
+    else:
+        show_sidebar_document_index_status(
+            system.applications,
+            st.session_state,
+            already_in_qdrant=already_in_qdrant,
+        )
+elif st.session_state.processed_pdf and st.session_state.text:
+    show_sidebar_document_index_status(system.applications, st.session_state)
 
 # Main input area based on selected task
 input_data = {}
@@ -173,6 +277,9 @@ if st.button("Run Task"):
     if (task == "data_extraction" or task == "question_answering") and not (input_data.get("text") or input_data.get("context")) and not st.session_state.processed_pdf:
         st.error("Please upload a document or provide text input for data extraction / question answering.")
     else:
+        if task in ("data_extraction", "question_answering"):
+            if st.session_state.document_id:
+                input_data["document_id"] = st.session_state.document_id
         with st.spinner("Running..."):
             result = system.run_application(task, **input_data, reasoning_type=reasoning_type)
             st.subheader("System Prompt")

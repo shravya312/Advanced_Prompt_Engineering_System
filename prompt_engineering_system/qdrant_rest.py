@@ -102,3 +102,25 @@ class QdrantRestClient:
 
     def delete_collection(self, name: str) -> None:
         self._request("DELETE", f"/collections/{name}")
+
+    def collection_info(self, name: str) -> Dict[str, Any]:
+        payload = self._request("GET", f"/collections/{name}")
+        return payload.get("result", {}) or {}
+
+    def scroll_points(
+        self,
+        collection: str,
+        limit: int = 1,
+        with_payload: bool = True,
+    ) -> List[Dict[str, Any]]:
+        body: Dict[str, Any] = {
+            "limit": limit,
+            "with_payload": with_payload,
+            "with_vector": False,
+        }
+        payload = self._request(
+            "POST",
+            f"/collections/{collection}/points/scroll",
+            body,
+        )
+        return payload.get("result", {}).get("points", []) or []
