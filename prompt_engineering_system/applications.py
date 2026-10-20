@@ -451,7 +451,7 @@ def _normalize_code_task_description(task_description: str, language: str) -> st
     stripped = re.sub(r"^the\s+", "", stripped, flags=re.IGNORECASE).strip()
     if stripped and not re.match(
         r"^(use|implement|create|build|write|load|run|compute|define|develop|"
-        r"accept|read|parse|convert|extract|generate|return|given)\b",
+        r"accept|read|parse|convert|extract|generate|return|given|takes?|accepts?)\b",
         stripped,
         flags=re.IGNORECASE,
     ):
