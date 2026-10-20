@@ -17,6 +17,28 @@ import re
 # VECTOR_SIZE = 384
 # CHUNK_SIZE = 1000
 
+# Glued labels like "Section A: ... Section B: ..." on one line (any document type).
+_SECTION_LABEL_RE = re.compile(
+    r"(?<!\n)\s+(?=([A-Z][A-Za-z0-9][A-Za-z0-9 /&()\-]{0,48}):)",
+)
+
+
+def format_output_for_display(text: str) -> str:
+    """Break glued section labels onto new lines for readable markdown."""
+    if not text or not isinstance(text, str):
+        return text or ""
+    if text.count("\n") >= 3:
+        return text.strip()
+    formatted = _SECTION_LABEL_RE.sub("\n\n", text.strip())
+    formatted = re.sub(
+        r"^([A-Z][A-Za-z0-9][A-Za-z0-9 /&()\-]{0,48}:)\s*",
+        r"## \1\n",
+        formatted,
+        flags=re.MULTILINE,
+    )
+    return formatted.strip()
+
+
 # ===== Streamlit UI =====
 st.set_page_config(layout="wide")
 st.title("Advanced Prompt Engineering System")
@@ -43,7 +65,7 @@ if 'last_uploaded_filename' not in st.session_state:
 
 _qdrant_url, _qdrant_key = qdrant_config()
 if get_qdrant_client(_qdrant_url, _qdrant_key):
-    st.sidebar.success("Qdrant: connected (required for PDF/RAG)")
+    st.sidebar.success("Qdrant: connected (required for retrieval-augmented tasks)")
 else:
     st.sidebar.error("Qdrant: not connected — fix QDRANT_URL / QDRANT_API_KEY in .env")
 
@@ -61,7 +83,7 @@ reasoning_type = st.sidebar.selectbox("Select Reasoning Type", [
 ])
 
 # PDF Upload Section - now in sidebar as it's optional per task
-pdf_file = st.sidebar.file_uploader("Upload a PDF file (for Data Extraction/Q&A)", type=["pdf"])
+pdf_file = st.sidebar.file_uploader("Upload a document (PDF) for extraction / Q&A", type=["pdf"])
 
 if pdf_file is not None:
     if st.session_state.last_uploaded_filename != pdf_file.name:
@@ -79,7 +101,7 @@ if pdf_file is not None:
             with open(temp_path, "wb") as f:
                 f.write(pdf_file.read())
             st.session_state.pdf_path = temp_path
-            st.sidebar.info("⏳ Extracting and processing PDF...")
+            st.sidebar.info("⏳ Extracting and indexing document...")
             text = system.applications.extract_text_from_pdf(temp_path)
             st.session_state.text = text
             if text:
@@ -92,13 +114,13 @@ if pdf_file is not None:
                     and system.applications.upload_to_qdrant(chunks, embeddings)
                 ):
                     st.session_state.processed_pdf = True
-                    st.sidebar.success("PDF indexed in Qdrant.")
+                    st.sidebar.success("Document indexed in Qdrant.")
                 else:
-                    st.sidebar.error("Failed to index PDF in Qdrant.")
+                    st.sidebar.error("Failed to index document in Qdrant.")
             else:
-                st.sidebar.error("Failed to extract text from PDF.")
+                st.sidebar.error("Failed to extract text from document.")
         except Exception as e:
-            st.sidebar.error(f"Error processing PDF: {str(e)}")
+            st.sidebar.error(f"Error processing document: {str(e)}")
             if st.session_state.pdf_path:
                 shutil.rmtree(os.path.dirname(st.session_state.pdf_path))
                 st.session_state.pdf_path = None
@@ -112,32 +134,44 @@ elif task == "code_generation":
     st.header("Code Generation")
     input_data["task_description"] = st.text_input(
         "Describe the code task",
-        placeholder="e.g. YOLOv8 on an image path, class 9 only, draw boxes (one function)",
+        value="",
+        placeholder="",
+        key="code_task_description",
     )
     input_data["language"] = st.selectbox("Programming Language", ["Python", "JavaScript", "Java", "C++", "Other"])
 elif task == "data_extraction":
     st.header("Data Extraction")
     if st.session_state.processed_pdf:
-        st.info("Using text from uploaded PDF for data extraction.")
+        st.info("Using text from uploaded document for data extraction.")
         input_data["text"] = st.session_state.text
         st.text_area("Extracted Text (Read-only)", value=st.session_state.text, height=200, disabled=True)
     else:
         input_data["text"] = st.text_area("Text to Extract Data From")
-    fields = st.text_input("Fields to Extract (comma separated)")
+    fields = st.text_input(
+        "Fields to Extract (comma separated)",
+        value="",
+        placeholder="",
+        key="extraction_fields",
+    )
     input_data["fields"] = [f.strip() for f in fields.split(",") if f.strip()]
 elif task == "question_answering":
     st.header("Question Answering")
     if st.session_state.processed_pdf:
-        st.info("Using text from uploaded PDF for context.")
+        st.info("Using text from uploaded document for context.")
         input_data["context"] = st.session_state.text
         st.text_area("Extracted Context (Read-only)", value=st.session_state.text, height=200, disabled=True)
     else:
         input_data["context"] = st.text_area("Context")
-    input_data["question"] = st.text_input("Question")
+    input_data["question"] = st.text_input(
+        "Question",
+        value="",
+        placeholder="",
+        key="qa_question",
+    )
 
 if st.button("Run Task"):
     if (task == "data_extraction" or task == "question_answering") and not (input_data.get("text") or input_data.get("context")) and not st.session_state.processed_pdf:
-        st.error("Please upload a PDF or provide text input for Data Extraction/Question Answering.")
+        st.error("Please upload a document or provide text input for data extraction / question answering.")
     else:
         with st.spinner("Running..."):
             result = system.run_application(task, **input_data, reasoning_type=reasoning_type)
@@ -175,6 +209,10 @@ if st.button("Run Task"):
                     st.markdown(result.get("output", "N/A"))
             else:
                 st.subheader("Output")
-                st.markdown(result.get("output", "N/A"))
+                raw_output = result.get("output", "N/A")
+                if task in ("data_extraction", "question_answering"):
+                    st.markdown(format_output_for_display(raw_output))
+                else:
+                    st.markdown(raw_output)
             st.subheader("Prompt Score (ROUGE-L)")
             st.write(result.get("score", "N/A"))

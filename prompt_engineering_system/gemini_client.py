@@ -92,7 +92,17 @@ class GeminiModel:
         self._last_model_used = model
         return GeminiResponse(text, model=model)
 
-    def generate_content(self, prompt: str, timeout: int = 120) -> GeminiResponse:
+    @staticmethod
+    def _is_retryable_error(exc: RuntimeError) -> bool:
+        message = str(exc).lower()
+        if "timed out" in message or "timeout" in message:
+            return True
+        code = GeminiModel._http_code_from_error(exc)
+        return code in _RETRYABLE_HTTP_CODES
+
+    def generate_content(self, prompt: str, timeout: Optional[int] = None) -> GeminiResponse:
+        if timeout is None:
+            timeout = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "180"))
         last_error: Optional[Exception] = None
         max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "2"))
 
@@ -102,10 +112,10 @@ class GeminiModel:
                     return self._call_model(model, prompt, timeout)
                 except RuntimeError as exc:
                     last_error = exc
-                    code = self._http_code_from_error(exc)
-                    if code in _RETRYABLE_HTTP_CODES and attempt < max_retries:
-                        time.sleep(1.5 * (attempt + 1))
+                    if self._is_retryable_error(exc) and attempt < max_retries:
+                        time.sleep(2.0 * (attempt + 1))
                         continue
+                    code = self._http_code_from_error(exc)
                     if code in (404, 400):
                         break
                     if code in _RETRYABLE_HTTP_CODES:

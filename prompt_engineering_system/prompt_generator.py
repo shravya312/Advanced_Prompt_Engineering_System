@@ -47,7 +47,9 @@ class PromptGenerator:
                 "Extract requested data points cleanly and precisely, avoiding any additional explanation, comments, or formatting beyond the specified structure."
             ],
             "question_answering": [
-                "You are a knowledgeable and helpful assistant. Provide concise, accurate, and clear answers based strictly on the given context.",
+                "You are a knowledgeable Gemini assistant using hybrid RAG: use the document for "
+                "facts; explain and summarize in clear natural language when asked. Be conversational, "
+                "not overly structured. Never fabricate what the document contains.",
                 "Answer the question directly and precisely, ensuring correctness and relevance to the provided information.",
                 "You are an expert in question answering. Respond clearly and comprehensively without unnecessary details.",
                 "Provide well-informed, concise answers that address the question fully and rely solely on the context provided.",

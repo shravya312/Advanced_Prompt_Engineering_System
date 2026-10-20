@@ -29,6 +29,106 @@ CHAIN_OF_THOUGHT_SUMMARY_SYSTEM = (
     "Use the exact markdown section headers requested."
 )
 
+QA_HYBRID_RAG_POLICY = (
+    "Answer policy (retrieved document + Gemini knowledge):\n"
+    "1) Document-bound: For questions about what the source document states (names, dates, titles, "
+    "listed items, achievements), answer only from the Context. If missing, say it is "
+    "not stated in the document.\n"
+    "2) Elaboration allowed: When the user asks to summarize, explain, define, or describe something "
+    "(terms, tools, projects, methods), answer in a clear conversational style: state what the "
+    "document says, then explain ideas in plain language using general knowledge. Do not invent "
+    "document facts not present in the Context.\n"
+    "3) Never refuse to explain because the document omits definitions; teach the concept naturally.\n"
+    "4) Do not add 'why it fits this project', design rationale, or technology justification sections "
+    "unless the question explicitly asks why, reason, rationale, or purpose.\n"
+)
+
+
+def qa_answer_instructions(question: str) -> List[str]:
+    """Pick answer style from the user's question (factual vs explain vs why vs list vs how)."""
+    q = question.strip()
+    if not q:
+        return ["Answer mode (direct): Reply concisely using the Context."]
+
+    instructions: List[str] = []
+    marks_match = re.search(r"(\d+)\s*marks", q, re.IGNORECASE)
+    if marks_match:
+        marks = int(marks_match.group(1))
+        if marks >= 8:
+            instructions.append(
+                "Exam style (high marks): long, structured answer with intro, steps, examples, "
+                "and conclusion as appropriate."
+            )
+        elif marks >= 5:
+            instructions.append(
+                "Exam style (medium marks): moderate detail with explanation and at least one example."
+            )
+        else:
+            instructions.append("Exam style (low marks): concise, to the point.")
+
+    wants_why = bool(re.search(r"\b(why|reason|rationale|purpose)\b", q, re.IGNORECASE))
+    wants_how = bool(re.search(r"\bhow\s+(does|do|is|are|can|to)\b", q, re.IGNORECASE))
+    wants_list = bool(
+        re.search(
+            r"\b(list|enumerate|name all|what are the|which .+ are|all the)\b",
+            q,
+            re.IGNORECASE,
+        )
+    )
+    wants_factual = bool(
+        re.search(
+            r"\b(what is my|what's my|my cgpa|my percentage|when did|when was|"
+            r"where did|who is|how many|email|phone|contact)\b",
+            q,
+            re.IGNORECASE,
+        )
+    )
+    wants_explain = bool(
+        re.search(
+            r"\b(explain|describe|summarize|summary|overview|define|tell me about|walk me through)\b",
+            q,
+            re.IGNORECASE,
+        )
+        or (
+            re.search(r"\bwhat (is|are)\b", q, re.IGNORECASE) and not wants_factual
+        )
+    )
+
+    if wants_why:
+        instructions.append(
+            "Answer mode (why): User wants rationale. Say what the document states, define the "
+            "technology or approach briefly, then explain why it is used or fits (note when you "
+            "are inferring beyond the document)."
+        )
+    elif wants_factual:
+        instructions.append(
+            "Answer mode (factual): Short, direct answer from the Context only. No long tutorials."
+        )
+    elif wants_list and not wants_explain:
+        instructions.append(
+            "Answer mode (list): Bullet list of items found in the Context; one line per item unless "
+            "the user also asked to explain each."
+        )
+    elif wants_how and not wants_explain:
+        instructions.append(
+            "Answer mode (how): Step-by-step or procedural explanation; ground steps in the Context "
+            "when describing this document or project, use general knowledge for how the method works."
+        )
+    elif wants_explain or wants_list:
+        instructions.append(
+            "Answer mode (explain): Clear conversational overview—what the document says, then "
+            "plain-language explanations of key terms. No 'why it fits' section unless the question "
+            "asked why."
+        )
+    else:
+        instructions.append(
+            "Answer mode (direct): Answer the question naturally; use the Context for document facts "
+            "and general knowledge only when needed to make the answer understandable."
+        )
+
+    return instructions
+
+
 _PKG_DIR = Path(__file__).resolve().parent
 load_dotenv(_PKG_DIR / ".env")
 
@@ -38,7 +138,21 @@ CHUNK_SIZE = 1000
 DEFAULT_GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 PROMPT_VARIANT_LIMIT = int(os.getenv("PROMPT_VARIANT_LIMIT", "3"))
 
-os.environ.setdefault("HF_HOME", str(Path.home() / "huggingface_cache"))
+def _configure_hf_environment() -> None:
+    """Use the standard Hugging Face cache (not ~/huggingface_cache) and certifi for SSL."""
+    try:
+        import certifi
+
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+    except ImportError:
+        pass
+    hf_home = Path.home() / ".cache" / "huggingface"
+    os.environ["HF_HOME"] = str(hf_home)
+    os.environ.pop("TRANSFORMERS_CACHE", None)
+
+
+_configure_hf_environment()
 
 
 @st.cache_resource
@@ -59,12 +173,18 @@ def get_gemini_model(model_name: str, api_key: str):
 
 @st.cache_resource
 def get_embedding_model():
+    _configure_hf_environment()
     try:
         from sentence_transformers import SentenceTransformer
 
-        return SentenceTransformer("all-MiniLM-L6-v2")
+        model_id = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+        return SentenceTransformer(model_id)
     except Exception as exc:
-        st.error(f"Failed to initialize SentenceTransformer: {exc}")
+        st.error(
+            "Failed to initialize SentenceTransformer. "
+            "Ensure `all-MiniLM-L6-v2` can download (network/SSL) or is cached under "
+            f"{Path.home() / '.cache' / 'huggingface'}. Details: {exc}"
+        )
         return None
 
 
@@ -139,10 +259,10 @@ class SpecializedApplications:
                 "Read the text below. Use Tree-of-Thought summarization.\n"
                 "You MUST include exactly these markdown section headers in this order:\n\n"
                 "## Branch A\n"
-                "Name one summarization strategy (e.g. technical/method focus). "
+                "Name one summarization strategy. "
                 "Explain the angle in 1-2 sentences, then give a 2-4 sentence draft summary using that branch.\n\n"
                 "## Branch B\n"
-                "Name a different strategy (e.g. challenges/deployment focus). "
+                "Name a different strategy. "
                 "Explain the angle in 1-2 sentences, then give a 2-4 sentence draft summary using that branch.\n\n"
                 "## Strategy Comparison\n"
                 "Explicitly compare Branch A vs Branch B: what each emphasizes, strengths, weaknesses, "
@@ -191,11 +311,31 @@ class SpecializedApplications:
         )
         self.prompt_generator.add_template(
             "data_extraction",
-            "{system_prompt}\nExtract the following fields from the text: {fields}\nText: {text}\n",
+            (
+                "{system_prompt}\n\n"
+                "Extract the following fields from the text: {fields}\n\n"
+                "{extraction_format_notes}\n"
+                "Output format (required):\n"
+                "- Use one markdown heading (`## Title`) per requested field name.\n"
+                "- If the source uses subheadings under a topic, mirror those subheadings as separate "
+                "`##` sections instead of merging into one list.\n"
+                "- One extracted value per bullet line (`- value`); do not put multiple values on one line.\n"
+                "- Put a blank line between sections. Do not merge sections into one paragraph.\n"
+                "- Extract only what appears in the text; do not add definitions unless a field asks for them.\n\n"
+                "Text:\n{text}\n"
+            ),
         )
         self.prompt_generator.add_template(
             "question_answering",
-            "{system_prompt}\nContext: {context}\nQuestion: {question}\nAnswer:",
+            (
+                "{system_prompt}\n\n"
+                "Context:\n{context}\n\n"
+                "Question: {question}\n\n"
+                "{hybrid_rag_policy}\n"
+                "{answer_instructions}\n"
+                "Answer using clear markdown: headings (`##`) per major section, bullet lists where helpful, "
+                "and short paragraphs. Do not answer in one long unbroken line.\n"
+            ),
         )
 
     def _setup_rag_collection(self) -> bool:
@@ -254,6 +394,20 @@ class SpecializedApplications:
             st.error(f"Qdrant upload failed: {exc}")
             return False
 
+    def _build_qa_context(self, context: str, relevant_chunks: list) -> str:
+        """Avoid sending full document plus duplicate RAG chunks (reduces timeouts)."""
+        max_chars = int(os.getenv("QA_CONTEXT_MAX_CHARS", "16000"))
+        unique = [c for c in dict.fromkeys(relevant_chunks) if c and str(c).strip()]
+        if unique:
+            merged = "\n\n---\n\n".join(unique)
+            if len(merged) > max_chars:
+                merged = merged[:max_chars] + "\n\n[Retrieved context truncated.]"
+            return merged
+        text = context or ""
+        if len(text) > max_chars:
+            return text[:max_chars] + "\n\n[Context truncated for length.]"
+        return text
+
     def search_chunks(self, query: str, limit: int = 5) -> list:
         client = self._require_qdrant()
         model = get_embedding_model()
@@ -273,7 +427,7 @@ class SpecializedApplications:
                 text += page.extract_text() or ""
             return text
         except Exception as exc:
-            st.error(f"Error extracting text from PDF: {exc}")
+            st.error(f"Error extracting text from document: {exc}")
             return ""
 
     def optimize_prompt(
@@ -486,11 +640,18 @@ class SpecializedApplications:
         system_prompt = self.prompt_generator.generate_system_prompts(
             "data_extraction", reasoning_type=reasoning_type
         )[0]
+        extraction_format_notes = ""
+        if len(fields) == 1:
+            extraction_format_notes = (
+                "Only one field was requested. If the document splits this topic into labeled "
+                "subsections, use each subsection title from the source as its own `##` heading.\n"
+            )
         prompt = self.prompt_generator.generate_prompt(
             "data_extraction",
             system_prompt,
             text=combined_text,
             fields=", ".join(fields),
+            extraction_format_notes=extraction_format_notes,
         )
 
         try:
@@ -517,47 +678,33 @@ class SpecializedApplications:
                 "score": 0,
             }
 
-        relevant_chunks = self.search_chunks(question)
-        combined_context = context
-        if relevant_chunks:
-            combined_context += "\n\nRelevant context:\n" + "\n".join(dict.fromkeys(relevant_chunks))
+        rag_limit = int(os.getenv("QA_RAG_CHUNK_LIMIT", "8"))
+        relevant_chunks = self.search_chunks(question, limit=rag_limit)
+        combined_context = self._build_qa_context(context, relevant_chunks)
 
-        import re
-
-        marks_match = re.search(r"(\d+)\s*marks", question, re.IGNORECASE)
-        extra_instruction = ""
-        if marks_match:
-            marks = int(marks_match.group(1))
-            if marks >= 8:
-                extra_instruction = (
-                    "This is a high-mark question. Write a long, detailed, and well-structured answer. "
-                    "Include introduction, step-by-step explanation, algorithm, math, advantages, "
-                    "disadvantages, applications, and examples."
-                )
-            elif marks >= 5:
-                extra_instruction = (
-                    "This is a medium-mark question. Write a moderately detailed answer with "
-                    "explanation, steps, and at least one example."
-                )
-            else:
-                extra_instruction = "This is a short-mark question. Write a concise answer."
+        answer_instructions = qa_answer_instructions(question)
 
         system_prompt = self.prompt_generator.generate_system_prompts(
             "question_answering", reasoning_type=reasoning_type
         )[0]
-        prompt = (
-            f"{system_prompt}\n\n"
-            f"Context:\n{combined_context}\n\n"
-            f"Question: {question}\n\n"
-            f"Instructions: {extra_instruction}\n\n"
-            f"Answer:"
+        prompt = self.prompt_generator.generate_prompt(
+            "question_answering",
+            system_prompt,
+            context=combined_context,
+            question=question,
+            hybrid_rag_policy=QA_HYBRID_RAG_POLICY,
+            answer_instructions="\n".join(answer_instructions),
         )
 
         try:
             output = self.gemini_model.generate_content(prompt).text.strip()
         except Exception as exc:
+            st.error(
+                "Gemini request failed (timeout or overload). Wait a moment and try again, "
+                "or ask a shorter question. "
+                f"Details: {exc}"
+            )
             output = f"Error from Gemini: {exc}"
-            st.error(output)
 
         return {
             "output": output,
